@@ -140,6 +140,11 @@ async fn main() {
                     },
                     VertexAttribute {
                         offset: std::mem::size_of::<[f32; 3]>() as BufferAddress,
+                        shader_location: 2,
+                        format: VertexFormat::Float32x3,
+                    },
+                    VertexAttribute {
+                        offset: (std::mem::size_of::<[f32; 3]>() * 2) as BufferAddress,
                         shader_location: 1,
                         format: VertexFormat::Float32x2,
                     },

@@ -62,9 +62,53 @@ pub fn load_obj_simple(path: &str) -> Result<ModelObj, String> {
         }
     }
 
+    let mut normals_per_vertex: Vec<Vec<[f32; 3]>> = vec![Vec::new(); positions.len()];
+    for chunk in face_indices.chunks(3) {
+        if chunk.len() < 3 {
+            continue;
+        }
+        let p0 = positions[chunk[0].0];
+        let p1 = positions[chunk[1].0];
+        let p2 = positions[chunk[2].0];
+        let e1 = [p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]];
+        let e2 = [p2[0] - p0[0], p2[1] - p0[1], p2[2] - p0[2]];
+        let nx = e1[1] * e2[2] - e1[2] * e2[1];
+        let ny = e1[2] * e2[0] - e1[0] * e2[2];
+        let nz = e1[0] * e2[1] - e1[1] * e2[0];
+        let len = f32::sqrt(nx * nx + ny * ny + nz * nz);
+        let normal = if len > 0.0 {
+            [nx / len, ny / len, nz / len]
+        } else {
+            [0.0, 0.0, 1.0]
+        };
+        for &(pos_idx, _) in chunk {
+            normals_per_vertex[pos_idx].push(normal);
+        }
+    }
+
+    let mut averaged_normals = vec![[0.0, 0.0, 0.0]; positions.len()];
+    for (i, norms) in normals_per_vertex.iter().enumerate() {
+        if norms.is_empty() {
+            averaged_normals[i] = [0.0, 0.0, 1.0];
+            continue;
+        }
+        let sum: [f32; 3] =
+            norms.iter()
+                .fold([0.0, 0.0, 0.0], |acc, n| [acc[0] + n[0], acc[1] + n[1], acc[2] + n[2]]);
+        let count = norms.len() as f32;
+        let avg = [sum[0] / count, sum[1] / count, sum[2] / count];
+        let len = f32::sqrt(avg[0] * avg[0] + avg[1] * avg[1] + avg[2] * avg[2]);
+        averaged_normals[i] = if len > 0.0 {
+            [avg[0] / len, avg[1] / len, avg[2] / len]
+        } else {
+            [0.0, 0.0, 1.0]
+        };
+    }
+
     let mut vertices = Vec::with_capacity(face_indices.len());
     for (pos_idx, tex_idx_opt) in face_indices {
         let pos = positions[pos_idx];
+        let normal = averaged_normals[pos_idx];
         let tex = tex_idx_opt
             .filter(|&idx| idx < tex_coords.len())
             .map(|idx| tex_coords[idx])
@@ -72,6 +116,7 @@ pub fn load_obj_simple(path: &str) -> Result<ModelObj, String> {
 
         vertices.push(Vertex {
             position: [pos[0], pos[1], pos[2]],
+            normal,
             tex_coord: tex,
         });
     }
@@ -83,12 +128,12 @@ pub fn load_obj_simple(path: &str) -> Result<ModelObj, String> {
 fn default_vertices() -> Vec<Vertex> {
     let h = DEFAULT_VERTEX_HALF_SIZE;
     vec![
-        Vertex { position: [-h, h, 0.0], tex_coord: [0.0, 0.0] },
-        Vertex { position: [-h, -h, 0.0], tex_coord: [0.0, 1.0] },
-        Vertex { position: [h, -h, 0.0], tex_coord: [1.0, 1.0] },
-        Vertex { position: [h, -h, 0.0], tex_coord: [1.0, 1.0] },
-        Vertex { position: [h, h, 0.0], tex_coord: [1.0, 0.0] },
-        Vertex { position: [-h, h, 0.0], tex_coord: [0.0, 0.0] },
+        Vertex { position: [-h, h, 0.0], normal: [0.0, 0.0, 1.0], tex_coord: [0.0, 0.0] },
+        Vertex { position: [-h, -h, 0.0], normal: [0.0, 0.0, 1.0], tex_coord: [0.0, 1.0] },
+        Vertex { position: [h, -h, 0.0], normal: [0.0, 0.0, 1.0], tex_coord: [1.0, 1.0] },
+        Vertex { position: [h, -h, 0.0], normal: [0.0, 0.0, 1.0], tex_coord: [1.0, 1.0] },
+        Vertex { position: [h, h, 0.0], normal: [0.0, 0.0, 1.0], tex_coord: [1.0, 0.0] },
+        Vertex { position: [-h, h, 0.0], normal: [0.0, 0.0, 1.0], tex_coord: [0.0, 0.0] },
     ]
 }
 
@@ -155,7 +200,8 @@ impl ModelInstance {
             rotation,
             projection,
             use_texture: 1,
-            _padding: [0.0; 3],
+            _padding0: [0.0; 3],
+            light_dir: LIGHT_DIR,
         };
         let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Model Uniform Buffer"),
@@ -252,7 +298,8 @@ impl ModelInstance {
             rotation: self.rotation,
             projection,
             use_texture,
-            _padding: [0.0; 3],
+            _padding0: [0.0; 3],
+            light_dir: LIGHT_DIR,
         };
         queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[uniforms]));
     }

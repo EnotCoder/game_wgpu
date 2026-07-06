@@ -1,29 +1,27 @@
-// Структура uniform (оставляем как есть)
 struct Uniforms {
     translation: vec4<f32>,
     rotation: vec4<f32>,
     projection: mat4x4<f32>,
-    use_texture: i32
+    use_texture: i32,
+    light_dir: vec4<f32>,
 };
 
 @group(0) @binding(0)
 var<uniform> uniforms: Uniforms;
 
-// Добавляем текстуру и сэмплер во 2-ю группу
 @group(1) @binding(0)
 var my_texture: texture_2d<f32>;
 
 @group(1) @binding(1)
 var my_sampler: sampler;
 
-// Выходные данные вершинного шейдера
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
-    @location(0) tex_coord: vec2<f32>,  // Передаём UV координаты вместо цвета
-        @location(1) triangle_color: vec3<f32>,
+    @location(0) tex_coord: vec2<f32>,
+    @location(1) triangle_color: vec3<f32>,
+    @location(2) world_normal: vec3<f32>,
 };
 
-// Вращение вокруг X
 fn rotate_x(vertex: vec3<f32>, angle: f32) -> vec3<f32> {
     let c = cos(angle);
     let s = sin(angle);
@@ -34,7 +32,6 @@ fn rotate_x(vertex: vec3<f32>, angle: f32) -> vec3<f32> {
     );
 }
 
-// Вращение вокруг Y
 fn rotate_y(vertex: vec3<f32>, angle: f32) -> vec3<f32> {
     let c = cos(angle);
     let s = sin(angle);
@@ -45,7 +42,6 @@ fn rotate_y(vertex: vec3<f32>, angle: f32) -> vec3<f32> {
     );
 }
 
-// Вращение вокруг Z
 fn rotate_z(vertex: vec3<f32>, angle: f32) -> vec3<f32> {
     let c = cos(angle);
     let s = sin(angle);
@@ -59,42 +55,52 @@ fn rotate_z(vertex: vec3<f32>, angle: f32) -> vec3<f32> {
 @vertex
 fn vs_main(
     @location(0) position: vec3<f32>,
-    @location(1) tex_coord: vec2<f32>,  // Теперь это UV координаты
+    @location(1) tex_coord: vec2<f32>,
+    @location(2) normal: vec3<f32>,
     @builtin(vertex_index) vertex_index: u32,
 ) -> VertexOutput {
     var output: VertexOutput;
-    
-    // Применяем вращение по всем осям
+
     var rotated = position;
     rotated = rotate_x(rotated, uniforms.rotation.x);
     rotated = rotate_y(rotated, uniforms.rotation.y);
     rotated = rotate_z(rotated, uniforms.rotation.z);
-    
-    // Применяем трансляцию
+
+    var rotated_normal = normal;
+    rotated_normal = rotate_x(rotated_normal, uniforms.rotation.x);
+    rotated_normal = rotate_y(rotated_normal, uniforms.rotation.y);
+    rotated_normal = rotate_z(rotated_normal, uniforms.rotation.z);
+
     let world_pos = rotated + uniforms.translation.xyz;
-    
+
     output.position = uniforms.projection * vec4<f32>(world_pos, 1.0);
-    output.tex_coord = tex_coord;  // Передаём UV координаты
-    // Номер треугольника = индекс вершины / 3
+    output.tex_coord = tex_coord;
+    output.world_normal = rotated_normal;
+
     let triangle_id = vertex_index / 3;
-    
-    // Генерируем уникальный цвет для каждого треугольника
     let r = f32(triangle_id % 3) / 2.0;
     let g = f32((triangle_id / 3) % 3) / 2.0;
     let b = f32((triangle_id / 9) % 3) / 2.0;
-    
     output.triangle_color = vec3<f32>(r, g, b);
+
     return output;
 }
 
 @fragment
 fn fs_main(
-    @location(0) tex_coord: vec2<f32>,  // Получаем UV координаты
+    @location(0) tex_coord: vec2<f32>,
     @location(1) triangle_color: vec3<f32>,
+    @location(2) world_normal: vec3<f32>,
 ) -> @location(0) vec4<f32> {
-    if uniforms.use_texture == 1{
-        return textureSample(my_texture, my_sampler, tex_coord);
+    let light_dir = normalize(uniforms.light_dir.xyz);
+    let diffuse = max(dot(normalize(world_normal), light_dir), 0.0);
+    let ambient = 0.2;
+    let lighting = diffuse + ambient;
+
+    if uniforms.use_texture == 1 {
+        let tex_color = textureSample(my_texture, my_sampler, tex_coord);
+        return vec4<f32>(tex_color.rgb * lighting, tex_color.a);
     } else {
-        return vec4<f32>(triangle_color, 1.0);
+        return vec4<f32>(triangle_color * lighting, 1.0);
     }
 }

@@ -31,6 +31,8 @@ pub const FRAME_LATENCY: u32 = 2;
 pub const DEPTH_FORMAT: TextureFormat = TextureFormat::Depth32Float;
 pub const DEFAULT_SAMPLE_COUNT: u32 = 1;
 
+pub const LIGHT_DIR: [f32; 4] = [0.5, 0.7, 0.5, 0.0];
+
 pub const EGUI_PANEL_POS: [f32; 2] = [10.0, 10.0];
 pub const EGUI_PANEL_SIZE: [f32; 2] = [280.0, 400.0];
 pub const EGUI_INFO_POS: [f32; 2] = [580.0, 10.0];

@@ -7,6 +7,7 @@ use crate::constants::*;
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Vertex {
     pub position: [f32; 3],
+    pub normal: [f32; 3],
     pub tex_coord: [f32; 2],
 }
 
@@ -17,7 +18,8 @@ pub struct Uniforms {
     pub rotation: [f32; 4],
     pub projection: [f32; 16],
     pub use_texture: i32,
-    pub _padding: [f32; 3],
+    pub _padding0: [f32; 3],
+    pub light_dir: [f32; 4],
 }
 
 pub struct DepthBuffer {
