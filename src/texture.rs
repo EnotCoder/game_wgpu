@@ -1,83 +1,79 @@
-// texture.rs
-use wgpu::{util::DeviceExt, *};
 use image::GenericImageView;
+use wgpu::*;
 
-pub struct Texture {
-    pub texture: wgpu::Texture,      // Сама текстура на GPU
-    pub view: wgpu::TextureView,     // Представление текстуры
-    pub sampler: wgpu::Sampler,      // Сэмплер (как читать текстуру)
+pub struct LoadedTexture {
+    #[allow(dead_code)]
+    pub texture: wgpu::Texture,
+    pub view: TextureView,
+    pub sampler: Sampler,
 }
 
-impl Texture {
+impl LoadedTexture {
     pub fn from_bytes(
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
+        device: &Device,
+        queue: &Queue,
         bytes: &[u8],
         label: &str,
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        // 1. Загружаем изображение из байтов с помощью библиотеки image
         let img = image::load_from_memory(bytes)?;
-        // 2. Конвертируем в формат RGBA8 (32 бита на пиксель: R,G,B,A)
         let rgba = img.to_rgba8();
-        // 3. Получаем размеры изображения
         let dimensions = img.dimensions();
-        
-        // 4. Создаём размер текстуры
-        let size = wgpu::Extent3d {
+
+        let size = Extent3d {
             width: dimensions.0,
             height: dimensions.1,
-            depth_or_array_layers: 1,  // 2D текстура, не массив
+            depth_or_array_layers: 1,
         };
-        
-        // 5. Создаём текстуру на GPU
-        let texture = device.create_texture(&wgpu::TextureDescriptor {
+
+        let texture = device.create_texture(&TextureDescriptor {
             label: Some(label),
             size,
-            mip_level_count: 1,              // Без MIP-уровней (пока)
-            sample_count: 1,                 // Без мультисэмплинга
-            dimension: wgpu::TextureDimension::D2,  // 2D текстура
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,  // Формат RGBA8
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format: TextureFormat::Rgba8UnormSrgb,
+            usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
             view_formats: &[],
         });
-        
-        // 6. Записываем данные пикселей в текстуру
+
         queue.write_texture(
-            wgpu::ImageCopyTexture {
+            ImageCopyTexture {
                 texture: &texture,
                 mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
+                origin: Origin3d::ZERO,
+                aspect: TextureAspect::All,
             },
-            &rgba,  // Данные пикселей
-            wgpu::ImageDataLayout {
+            &rgba,
+            ImageDataLayout {
                 offset: 0,
-                bytes_per_row: Some(4 * dimensions.0),  // 4 байта на пиксель * ширина
+                bytes_per_row: Some(4 * dimensions.0),
                 rows_per_image: Some(dimensions.1),
             },
             size,
         );
-        
-        // 7. Создаём представление текстуры (способ доступа)
-        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        
-        // 8. Создаём сэмплер (определяет как текстура накладывается)
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            address_mode_u: wgpu::AddressMode::Repeat,   // Повторять по U
-            address_mode_v: wgpu::AddressMode::Repeat,   // Повторять по V
-            address_mode_w: wgpu::AddressMode::Repeat,   // Повторять по W
-            mag_filter: wgpu::FilterMode::Nearest,        // Увеличение: линейное
-            min_filter: wgpu::FilterMode::Nearest,       // Уменьшение: ближайший
-            mipmap_filter: wgpu::FilterMode::Nearest,    // MIP-фильтр
+
+        let view = texture.create_view(&TextureViewDescriptor::default());
+
+        let sampler = device.create_sampler(&SamplerDescriptor {
+            address_mode_u: AddressMode::Repeat,
+            address_mode_v: AddressMode::Repeat,
+            address_mode_w: AddressMode::Repeat,
+            mag_filter: FilterMode::Nearest,
+            min_filter: FilterMode::Nearest,
+            mipmap_filter: FilterMode::Nearest,
             ..Default::default()
         });
-        
-        Ok(Self { texture, view, sampler })
+
+        Ok(Self {
+            texture,
+            view,
+            sampler,
+        })
     }
-    
+
     pub fn from_path(
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
+        device: &Device,
+        queue: &Queue,
         path: &str,
         label: &str,
     ) -> Result<Self, Box<dyn std::error::Error>> {

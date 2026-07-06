@@ -1,344 +1,273 @@
+use std::env;
 use winit::{
-    event::{Event,WindowEvent},
-    event_loop::{EventLoop},
+    dpi::PhysicalSize,
+    event::{Event, WindowEvent},
+    event_loop::EventLoop,
+    keyboard::KeyCode,
     window::WindowBuilder,
 };
-use wgpu::{util::DeviceExt, *};
-use winit::dpi::PhysicalSize;
-use tokio;
-
-use winit::keyboard::KeyCode;
 use winit_input_helper::WinitInputHelper;
+use wgpu::*;
 
 mod buffers;
-mod render;
-mod models;
-mod texture;
+mod constants;
 mod egui_manager;
+mod models;
+mod render;
+mod texture;
 mod ui_panels;
 
-use egui_manager::EguiManager;
-use ui_panels::UiState;
-use egui_wgpu::ScreenDescriptor;
-
-
-use texture::*;
 use buffers::*;
-use render::*;
+use constants::*;
+use egui_manager::EguiManager;
 use models::*;
+use render::*;
+use ui_panels::UiState;
 
-
-use std::env;
+fn surface_config(format: TextureFormat, width: u32, height: u32) -> SurfaceConfiguration {
+    SurfaceConfiguration {
+        usage: TextureUsages::RENDER_ATTACHMENT,
+        format,
+        width,
+        height,
+        present_mode: PRESENT_MODE,
+        alpha_mode: CompositeAlphaMode::Auto,
+        view_formats: vec![],
+        desired_maximum_frame_latency: FRAME_LATENCY,
+    }
+}
 
 #[tokio::main]
 async fn main() {
-    //get model path
-    let model_path = {
-        let args:Vec<String> = env::args().collect();
-        if args.len() > 1{args[1].clone()}
-        else {"null.obj".to_string()}
-    };
-    //get texture path
-    let texture_path = {
-        let args:Vec<String> = env::args().collect();
-        if args.len() > 2{args[2].clone()}
-        else {"null.png".to_string()}
-    };
+    let args: Vec<String> = env::args().collect();
+    let model_path = args
+        .get(1)
+        .cloned()
+        .unwrap_or_else(|| DEFAULT_MODEL_PATH.to_string());
+    let texture_path = args
+        .get(2)
+        .cloned()
+        .unwrap_or_else(|| DEFAULT_TEXTURE_PATH.to_string());
 
-
-
-    //основной цикл winit
     let event_loop = EventLoop::new().unwrap();
-    //winit window
     let window = WindowBuilder::new()
-        .with_title("game")
-        .with_inner_size(PhysicalSize::new(800, 800))
+        .with_title(WINDOW_TITLE)
+        .with_inner_size(PhysicalSize::new(WINDOW_WIDTH, WINDOW_HEIGHT))
         .build(&event_loop)
         .unwrap();
-    
-    //instance (экземпляр)
-    //with defalt settings
-    let instance = wgpu::Instance::new(InstanceDescriptor::default());
 
-    //поверхность
-    let surface = instance.create_surface(&window)
+    let instance = Instance::new(InstanceDescriptor::default());
+    let surface = instance
+        .create_surface(&window)
         .expect("Failed to create surface");
 
-    //addapter/physical_device
-
-    //опции выбора видеокарты
-    let addapter_option = wgpu::RequestAdapterOptions {
-        //выбирает адаптер, совместимый с этой поверхностью (обычно дискретная видеокарта)
-        compatible_surface : Some(&surface),
-        //всё остальное поумолчанию
+    let adapter = pollster::block_on(instance.request_adapter(&RequestAdapterOptions {
+        compatible_surface: Some(&surface),
         ..Default::default()
-    };
-
-    //запрашиваем физ устройство
-    let addapter_future = instance.request_adapter(&addapter_option);
-    //ожидаем
-    let addapter = pollster::block_on(addapter_future).unwrap();
-
-    println!("{}",addapter.get_info().name);
-    
-    //Log device
-    let (device, queue) = addapter
-    .request_device(
-        &DeviceDescriptor { //настройки устройства
-            //какие плагины необходимы
-            required_features: Features::empty(),
-            //минимальные требования
-            required_limits: Limits::default(),
-            //Отладка
-            label: None,
-        },
-        None,
-    )
-    .await
+    }))
     .unwrap();
 
-    //init buffers
+    println!("{}", adapter.get_info().name);
 
-    let mut translation = [0.0, 0.0, 4.5, 0.0];
-    let rotation = [-0.2, 0.0, 0.0, 0.0];
+    let (device, queue) = adapter
+        .request_device(
+            &DeviceDescriptor {
+                required_features: Features::empty(),
+                required_limits: Limits::default(),
+                label: None,
+            },
+            None,
+        )
+        .await
+        .unwrap();
+
     let window_size = window.inner_size();
+    let mut buffers = init_buffers(window_size, &device);
+    let projection = &mut buffers.projection;
 
-    let mut buffers = init_buffers(
-        window_size,
-        translation,
-        rotation,
-        &device,
-    );
+    let translation = INITIAL_TRANSLATION;
+    let rotation = INITIAL_ROTATION;
 
-    let mut projection = buffers.projection;
-    let uniform_buffer = &buffers.uniform_buffer;
-    let depth_stencil = buffers.depth_stencil;
-    let bind_group_layout = &buffers.bind_group_layout;
-    let bind_group = &buffers.bind_groupprojection;
-    let texture_bind_group_layout = &buffers.texture_bind_group_layout;
+    let mut models = vec![
+        ModelInstance::new(
+            &model_path,
+            &device,
+            &queue,
+            translation,
+            [0.0, 0.0, 0.0, 0.0],
+            rotation,
+            *projection,
+            &texture_path,
+        ),
+        ModelInstance::new(
+            FON_MODEL_PATH,
+            &device,
+            &queue,
+            translation,
+            FON_TRANSLATION_BASE,
+            [0.0, 0.0, 0.0, 0.0],
+            *projection,
+            FON_TEXTURE_PATH,
+        ),
+    ];
 
-    //Load main scene
-
-    let load_model = ModelInstance::new(&model_path, &device, &queue,
-        translation, [0.0, 0.0, 0.0, 0.0],
-        rotation, projection, &texture_path);
-    
-    let fon_model = ModelInstance::new("models/fon.obj", &device, &queue,
-        translation, [0.0, 0.0, 15.0, 0.0],
-        [0.0, 0.0, 0.0, 0.0], projection, "tex/fon_texture.png");
-
-    let mut models = vec![load_model, fon_model];
-
-
-    //shaders
-    //получаем код шейдера
-    let shader_code = include_str!(".././src/shaders.wgsl");
-    //shader object
-    //описание шейдера
-    let description = wgpu::ShaderModuleDescriptor {
-        //отладка
-        label : None,
-        //.into() - преобразует &str в Cow<'_, str> <- (владеть или читать)
-        source : wgpu::ShaderSource::Wgsl(shader_code.into()),
-    };
-    //Компилирует шейдер для GPU
-    let shader_module = device.create_shader_module(description);
-
-
-    //Render pipeline
-    //PipelineLayout
-    let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
-        label: Some("Pipeline Layout"),
-        bind_group_layouts: &[&bind_group_layout, &texture_bind_group_layout],
-        push_constant_ranges: &[], // константы, которые можно быстро обновлять
+    let shader_code = include_str!("shaders.wgsl");
+    let shader_module = device.create_shader_module(ShaderModuleDescriptor {
+        label: None,
+        source: ShaderSource::Wgsl(shader_code.into()),
     });
 
-    let caps = surface.get_capabilities(&addapter);
+    let caps = surface.get_capabilities(&adapter);
     let surface_format = caps.formats[0];
 
+    let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
+        label: Some("Pipeline Layout"),
+        bind_group_layouts: &[&buffers.bind_group_layout, &buffers.texture_bind_group_layout],
+        push_constant_ranges: &[],
+    });
 
-    let description = wgpu::RenderPipelineDescriptor {
-        label : Some("Render Pipeline"),
-        vertex : wgpu::VertexState {
-            buffers: &[wgpu::VertexBufferLayout {
-                array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
-                step_mode: wgpu::VertexStepMode::Vertex,
+    let render_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
+        label: Some("Render Pipeline"),
+        vertex: VertexState {
+            buffers: &[VertexBufferLayout {
+                array_stride: std::mem::size_of::<Vertex>() as BufferAddress,
+                step_mode: VertexStepMode::Vertex,
                 attributes: &[
-                    wgpu::VertexAttribute {
-                        offset: 0,// смещение на 0 байт
-                        shader_location: 0,  // @location(0) в шейдере
-                        format: wgpu::VertexFormat::Float32x3,  // position: [f32; 2]
+                    VertexAttribute {
+                        offset: 0,
+                        shader_location: 0,
+                        format: VertexFormat::Float32x3,
                     },
-                    wgpu::VertexAttribute {
-                        offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,// смещение 8 байт
-                        shader_location: 1,  // @location(1) в шейдере
-                        format: wgpu::VertexFormat::Float32x2,
-                    }
-                ]
+                    VertexAttribute {
+                        offset: std::mem::size_of::<[f32; 3]>() as BufferAddress,
+                        shader_location: 1,
+                        format: VertexFormat::Float32x2,
+                    },
+                ],
             }],
-            module : &shader_module,
-            entry_point : "vs_main",
+            module: &shader_module,
+            entry_point: "vs_main",
         },
-
-        fragment : Some(wgpu::FragmentState {
+        fragment: Some(FragmentState {
             targets: &[Some(ColorTargetState {
                 format: surface_format,
                 blend: Some(BlendState::REPLACE),
                 write_mask: ColorWrites::ALL,
             })],
-            module : &shader_module,
-            entry_point : "fs_main",
+            module: &shader_module,
+            entry_point: "fs_main",
         }),
-        
         primitive: PrimitiveState {
-            topology: PrimitiveTopology::TriangleList, // список треугольников
-            strip_index_format: None, // не используем полоски
-            front_face: FrontFace::Ccw, // против часовой стрелки = лицевая
-            cull_mode: None, // не отсекаем грани
+            topology: PrimitiveTopology::TriangleList,
+            strip_index_format: None,
+            front_face: FrontFace::Ccw,
+            cull_mode: None,
             unclipped_depth: false,
-            polygon_mode: PolygonMode::Fill, // заливаем цветом (не каркасный режим)
-            conservative: false, // не использовать консервативный растеризатор
+            polygon_mode: PolygonMode::Fill,
+            conservative: false,
         },
+        layout: Some(&pipeline_layout),
+        depth_stencil: Some(buffers.depth_stencil),
+        multisample: Default::default(),
+        multiview: None,
+    });
 
-        layout : Some(&pipeline_layout),
-        depth_stencil: Some(depth_stencil),
-        multisample : Default::default(),
-        multiview : None,
-    };
-
-    let render_pipeline = device.create_render_pipeline(&description);
-
-    let config = SurfaceConfiguration {
-        usage: TextureUsages::RENDER_ATTACHMENT, // использовать как цель рендеринга
-        format: surface_format, // формат пикселей (BGRA8)
-        width: window_size.width, // ширина окна
-        height: window_size.height, // высота окна
-        present_mode: PresentMode::Fifo, //вертикальная синхронизация
-        alpha_mode: CompositeAlphaMode::Auto, // альфа-канал автоматический
-        view_formats: vec![], // дополнительные форматы для текстур
-        desired_maximum_frame_latency: 2, // задержка кадров (2 = баланс)
-    };
-
-    surface.configure(&device, &config);
-
-    ///////////
-
-    //main loop vars
-    let mut input = WinitInputHelper::new();
-    let speed = 0.1;
-    let rotation_speed = 0.01;
-
-    //INIT UV
-    let mut egui_manager = EguiManager::new(
+    surface.configure(
         &device,
-        surface_format,
-        None,  // depth format
-        1,     // samples
-        &window,
+        &surface_config(surface_format, window_size.width, window_size.height),
     );
 
+    let mut input = WinitInputHelper::new();
+    let mut egui_manager =
+        EguiManager::new(&device, surface_format, None, DEFAULT_SAMPLE_COUNT, &window);
     let mut ui_state = UiState::new(model_path, texture_path);
+    let win_id = window.id();
 
-    // main loop
     let _ = event_loop.run(|event, event_loop_target| {
-
-        if let Event::WindowEvent { event, window_id } = &event {
-            if *window_id == window.id() {
+        if let Event::WindowEvent {
+            event,
+            window_id: ev_id,
+        } = &event
+        {
+            if *ev_id == win_id {
                 egui_manager.handle_input(&window, event);
             }
         }
 
-        //Input
         if input.update(&event) {
             let scroll_delta = input.scroll_diff();
+            let main_model = &mut models[0];
 
-            if scroll_delta.1 > 0.0 && models[0].translation_base[2] < 5.0{
-                models[0].translation_base[2] += 0.5;
+            if scroll_delta.1 > 0.0 && main_model.translation_base[2] < ZOOM_MAX {
+                main_model.translation_base[2] += SCROLL_STEP;
             }
-            if scroll_delta.1 < 0.0 && models[0].translation_base[2] > -2.0{
-                models[0].translation_base[2] -= 0.5;
+            if scroll_delta.1 < 0.0 && main_model.translation_base[2] > ZOOM_MIN {
+                main_model.translation_base[2] -= SCROLL_STEP;
             }
 
             if input.key_pressed(KeyCode::F1) {
                 ui_state.toggle_panel();
             }
         }
-            
-        for model in &mut models{
-            let new_pos = [
+
+        for model in &mut models {
+            model.translation = [
                 model.translation_base[0] + translation[0],
                 model.translation_base[1] + translation[1],
                 model.translation_base[2] + translation[2],
                 model.translation_base[3] + translation[3],
             ];
-
-            model.translation = new_pos;
-            model.update_transform(&queue, projection, 1);
         }
 
-        models[0].update_transform(&queue, projection, ui_state.use_texture as i32);
-        
-
-        let uniforms = Uniforms { translation, rotation, projection, use_texture: 1 ,_padding: [0.0; 3],};
-        queue.write_buffer(uniform_buffer, 0, bytemuck::cast_slice(&[uniforms]));
-
-        //Render
+        models[0].update_transform(&queue, *projection, ui_state.use_texture as i32);
+        if models.len() > 1 {
+            models[1].update_transform(&queue, *projection, 1);
+        }
 
         match event {
-            //Exit
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
-                window_id,
-            } if window_id == window_id => {
+                window_id: ev_id,
+            } if ev_id == win_id => {
                 event_loop_target.exit();
             }
-            //Redraw window
             Event::AboutToWait => {
                 window.request_redraw();
             }
-            //Render
             Event::WindowEvent {
                 event: WindowEvent::RedrawRequested,
                 ..
             } => {
                 render(
-                    &surface,&device,&queue,&render_pipeline,
-                    &models,bind_group,&buffers.depth_buffer.view,
+                    &surface,
+                    &device,
+                    &queue,
+                    &render_pipeline,
+                    &models,
+                    &buffers.depth_buffer.view,
                     &mut egui_manager,
                     &window,
                     |ctx| ui_state.render(ctx),
                 );
                 models[0].rotation[1] += ui_state.rotation_speed;
             }
-
-            //Window resize
             Event::WindowEvent {
                 event: WindowEvent::Resized(new_size),
-                window_id,
-            } if window_id == window.id() => {
-                // Обновляем конфигурацию surface под новый размер
-                let config = SurfaceConfiguration {
-                    usage: TextureUsages::RENDER_ATTACHMENT,
-                    format: surface_format,
-                    width: new_size.width,
-                    height: new_size.height,
-                    present_mode: PresentMode::Fifo,
-                    alpha_mode: CompositeAlphaMode::Auto,
-                    view_formats: vec![],
-                    desired_maximum_frame_latency: 2,
-                };
-                surface.configure(&device, &config);
-
+                window_id: ev_id,
+            } if ev_id == win_id => {
+                surface.configure(
+                    &device,
+                    &surface_config(surface_format, new_size.width, new_size.height),
+                );
                 buffers.depth_buffer.resize(&device, new_size);
-
-                let new_aspect = new_size.width as f32 / new_size.height as f32;
-                    projection = create_perspective_matrix(new_aspect, 
-                    std::f32::consts::PI / 4.0, 0.1, 100.0);
+                *projection = create_perspective_matrix(
+                    new_size.width as f32 / new_size.height as f32,
+                    CAMERA_FOV,
+                    CAMERA_NEAR,
+                    CAMERA_FAR,
+                );
             }
-
-            // Игнорируем все остальные события
             _ => (),
         }
     });
-
 }
