@@ -4,8 +4,6 @@ use egui_winit::State;
 use wgpu::{CommandEncoder, Device, Queue, TextureFormat, TextureView};
 use winit::window::Window;
 
-use crate::constants::EGUI_WINDOW_ROUNDING;
-
 pub struct EguiManager {
     pub context: Context,
     state: State,
@@ -23,10 +21,20 @@ impl EguiManager {
         let egui_context = Context::default();
         let id = egui_context.viewport_id();
 
-        egui_context.set_visuals(Visuals {
-            window_rounding: egui::Rounding::same(EGUI_WINDOW_ROUNDING),
-            ..Default::default()
-        });
+        let mut style = (*egui_context.style()).clone();
+        style.visuals = Visuals::dark();
+        style.visuals.panel_fill = egui::Color32::from_rgb(38, 38, 42);
+        style.visuals.widgets.noninteractive.bg_fill = egui::Color32::from_rgb(48, 48, 54);
+        style.visuals.widgets.inactive.bg_fill = egui::Color32::from_rgb(58, 58, 64);
+        style.visuals.widgets.hovered.bg_fill = egui::Color32::from_rgb(68, 68, 76);
+        style.visuals.widgets.active.bg_fill = egui::Color32::from_rgb(78, 78, 86);
+        style.visuals.selection.bg_fill = egui::Color32::from_rgb(61, 110, 245);
+        style.visuals.hyperlink_color = egui::Color32::from_rgb(61, 110, 245);
+        style.visuals.window_rounding = egui::Rounding::same(0.0);
+        style.visuals.window_shadow = egui::epaint::Shadow::NONE;
+        style.spacing.item_spacing = egui::Vec2::new(8.0, 4.0);
+        style.spacing.button_padding = egui::Vec2::new(6.0, 2.0);
+        egui_context.set_style(style);
 
         let state = State::new(egui_context.clone(), id, window, None, None);
         let renderer = Renderer::new(device, output_color_format, output_depth_format, msaa_samples);

@@ -201,7 +201,7 @@ async fn main() {
         if input.update(&event) {
             let diff = input.cursor_diff();
             if input.mouse_held(0) {
-                camera.orbit(-diff.0 * CAMERA_ORBIT_SPEED, diff.1 * CAMERA_ORBIT_SPEED);
+                camera.orbit(diff.0 * CAMERA_ORBIT_SPEED, -diff.1 * CAMERA_ORBIT_SPEED);
             }
             if input.mouse_held(1) {
                 camera.pan(-diff.0, diff.1, CAMERA_PAN_SPEED);
@@ -246,6 +246,9 @@ async fn main() {
                 event: WindowEvent::RedrawRequested,
                 ..
             } => {
+                ui_state.vertex_count = models[0].vertices.len() as u32;
+                ui_state.triangle_count = models[0].index_count / 3;
+
                 render(
                     &surface,
                     &device,
@@ -257,7 +260,7 @@ async fn main() {
                     &window,
                     |ctx| ui_state.render(ctx),
                 );
-                models[0].rotation[1] += ui_state.rotation_speed;
+                ui_state.update_fps();
             }
             Event::WindowEvent {
                 event: WindowEvent::Resized(new_size),

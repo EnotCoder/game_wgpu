@@ -1,27 +1,39 @@
-use egui::{Context, Slider, Window};
+use std::time::Instant;
 
-use crate::constants::*;
+use egui::{Context, Frame, TopBottomPanel};
 
 pub struct UiState {
     pub show_panel: bool,
     pub model_path: String,
-    pub texture_path: String,
-    pub show_info_keyboard: bool,
-    pub show_effect: bool,
     pub use_texture: bool,
-    pub rotation_speed: f32,
+    pub fps: f32,
+    pub vertex_count: u32,
+    pub triangle_count: u32,
+    frame_count: u32,
+    fps_timer: Instant,
 }
 
 impl UiState {
-    pub fn new(model_path: String, texture_path: String) -> Self {
+    pub fn new(model_path: String, _texture_path: String) -> Self {
         Self {
             show_panel: true,
             model_path,
-            texture_path,
-            show_info_keyboard: false,
-            show_effect: false,
-            rotation_speed: 0.02,
             use_texture: true,
+            fps: 0.0,
+            vertex_count: 0,
+            triangle_count: 0,
+            frame_count: 0,
+            fps_timer: Instant::now(),
+        }
+    }
+
+    pub fn update_fps(&mut self) {
+        self.frame_count += 1;
+        let elapsed = self.fps_timer.elapsed();
+        if elapsed.as_secs_f32() >= 0.5 {
+            self.fps = self.frame_count as f32 / elapsed.as_secs_f32();
+            self.frame_count = 0;
+            self.fps_timer = Instant::now();
         }
     }
 
@@ -30,65 +42,76 @@ impl UiState {
             return;
         }
 
-        Window::new("TMV Alpha")
-            .default_pos(EGUI_PANEL_POS)
-            .default_size(EGUI_PANEL_SIZE)
-            .resizable(false)
-            .movable(false)
-            .title_bar(false)
+        let panel_color = egui::Color32::from_rgb(38, 38, 42);
+
+        TopBottomPanel::bottom("status_bar")
+            .min_height(52.0)
+            .frame(Frame {
+                fill: panel_color,
+                inner_margin: egui::Margin::symmetric(12.0, 6.0),
+                ..Default::default()
+            })
             .show(ctx, |ui| {
-                ui.heading("TMV Alpha");
-                ui.separator();
-                ui.label("Version - 0.36");
-                ui.separator();
-                ui.label(format!("Model path is '{}' ", self.model_path));
-                ui.label(format!("Texture path is '{}' ", self.texture_path));
-                ui.separator();
+                ui.horizontal(|ui| {
+                    ui.label(
+                        egui::RichText::new("TMV Alpha")
+                            .color(egui::Color32::from_rgb(61, 110, 245))
+                            .size(14.0)
+                            .strong(),
+                    );
+                    ui.label(
+                        egui::RichText::new("v0.36")
+                            .color(egui::Color32::from_rgb(140, 140, 150))
+                            .size(12.0),
+                    );
 
-                if ui.button("Info keyboard").clicked() {
-                    self.show_info_keyboard = !self.show_info_keyboard;
-                    self.show_effect = false;
-                }
+                    ui.separator();
 
-                if ui.button("Effects").clicked() {
-                    self.show_effect = !self.show_effect;
-                    self.show_info_keyboard = false;
-                }
+                    ui.label(
+                        egui::RichText::new(format!("Model: {}", self.model_path))
+                            .size(12.0),
+                    );
 
-                ui.separator();
-                ui.label("Rotation Speed");
-                ui.add(Slider::new(&mut self.rotation_speed, 0.0..=0.3));
-                ui.separator();
-                ui.checkbox(&mut self.use_texture, "Show_texture_model");
+                    ui.separator();
+
+                    ui.label(
+                        egui::RichText::new(format!("Verts: {}", self.vertex_count))
+                            .size(12.0),
+                    );
+                    ui.label(
+                        egui::RichText::new(format!("Tris: {}", self.triangle_count))
+                            .size(12.0),
+                    );
+
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let fps_color = if self.fps >= 55.0 {
+                            egui::Color32::from_rgb(76, 175, 80)
+                        } else if self.fps >= 30.0 {
+                            egui::Color32::from_rgb(255, 193, 7)
+                        } else {
+                            egui::Color32::from_rgb(244, 67, 54)
+                        };
+                        ui.label(
+                            egui::RichText::new(format!("FPS: {:.0}", self.fps))
+                                .color(fps_color)
+                                .size(12.0)
+                                .monospace(),
+                        );
+                    });
+                });
+
+                ui.horizontal(|ui| {
+                    ui.checkbox(&mut self.use_texture, "Texture");
+
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.label(
+                            egui::RichText::new("F1 - Toggle UI")
+                                .color(egui::Color32::from_rgb(100, 100, 110))
+                                .size(11.0),
+                        );
+                    });
+                });
             });
-
-        if self.show_info_keyboard {
-            Window::new("Info keyboard")
-                .default_pos(EGUI_INFO_POS)
-                .default_size(EGUI_INFO_SIZE)
-                .resizable(false)
-                .movable(false)
-                .title_bar(false)
-                .show(ctx, |ui| {
-                    ui.heading("Info keyboard");
-                    ui.separator();
-                    ui.label("F1 - Hide windows");
-                });
-        }
-
-        if self.show_effect {
-            Window::new("Effect")
-                .default_pos(EGUI_EFFECT_POS)
-                .default_size(EGUI_EFFECT_SIZE)
-                .resizable(false)
-                .movable(false)
-                .title_bar(false)
-                .show(ctx, |ui| {
-                    ui.heading("Effect");
-                    ui.separator();
-                    ui.label("Soon");
-                });
-        }
     }
 
     pub fn toggle_panel(&mut self) {
