@@ -10,6 +10,7 @@ use winit_input_helper::WinitInputHelper;
 use wgpu::*;
 
 mod buffers;
+mod camera;
 mod constants;
 mod egui_manager;
 mod models;
@@ -18,8 +19,10 @@ mod texture;
 mod ui_panels;
 
 use buffers::*;
+use camera::Camera;
 use constants::*;
 use egui_manager::EguiManager;
+use glam::Mat4;
 use models::*;
 use render::*;
 use ui_panels::UiState;
@@ -83,10 +86,16 @@ async fn main() {
 
     let window_size = window.inner_size();
     let mut buffers = init_buffers(window_size, &device);
-    let projection = &mut buffers.projection;
 
     let translation = INITIAL_TRANSLATION;
     let rotation = INITIAL_ROTATION;
+
+    let mut camera = Camera::new(
+        glam::Vec3::new(0.0, 0.0, 4.5),
+        CAMERA_INITIAL_DISTANCE,
+        0.0,
+        0.0,
+    );
 
     let mut models = vec![
         ModelInstance::new(
@@ -96,7 +105,7 @@ async fn main() {
             translation,
             [0.0, 0.0, 0.0, 0.0],
             rotation,
-            *projection,
+            buffers.projection_matrix,
             &texture_path,
         ),
         ModelInstance::new(
@@ -106,7 +115,7 @@ async fn main() {
             translation,
             FON_TRANSLATION_BASE,
             [0.0, 0.0, 0.0, 0.0],
-            *projection,
+            buffers.projection_matrix,
             FON_TEXTURE_PATH,
         ),
     ];
@@ -200,14 +209,17 @@ async fn main() {
         }
 
         if input.update(&event) {
-            let scroll_delta = input.scroll_diff();
-            let main_model = &mut models[0];
-
-            if scroll_delta.1 > 0.0 && main_model.translation_base[2] < ZOOM_MAX {
-                main_model.translation_base[2] += SCROLL_STEP;
+            let diff = input.cursor_diff();
+            if input.mouse_held(0) {
+                camera.orbit(-diff.0 * CAMERA_ORBIT_SPEED, diff.1 * CAMERA_ORBIT_SPEED);
             }
-            if scroll_delta.1 < 0.0 && main_model.translation_base[2] > ZOOM_MIN {
-                main_model.translation_base[2] -= SCROLL_STEP;
+            if input.mouse_held(1) {
+                camera.pan(-diff.0, diff.1, CAMERA_PAN_SPEED);
+            }
+
+            let scroll_delta = input.scroll_diff();
+            if scroll_delta.1 != 0.0 {
+                camera.zoom(scroll_delta.1 * CAMERA_ZOOM_SPEED);
             }
 
             if input.key_pressed(KeyCode::F1) {
@@ -224,9 +236,13 @@ async fn main() {
             ];
         }
 
-        models[0].update_transform(&queue, *projection, ui_state.use_texture as i32);
+        let view = camera.build_view_matrix();
+        let projection_mat = Mat4::from_cols_array(&buffers.projection_matrix);
+        let view_proj = (projection_mat * view).to_cols_array();
+
+        models[0].update_transform(&queue, view_proj, ui_state.use_texture as i32);
         if models.len() > 1 {
-            models[1].update_transform(&queue, *projection, 1);
+            models[1].update_transform(&queue, view_proj, 1);
         }
 
         match event {
@@ -265,7 +281,7 @@ async fn main() {
                     &surface_config(surface_format, new_size.width, new_size.height),
                 );
                 buffers.depth_buffer.resize(&device, new_size);
-                *projection = create_perspective_matrix(
+                buffers.projection_matrix = create_perspective_matrix(
                     new_size.width as f32 / new_size.height as f32,
                     CAMERA_FOV,
                     CAMERA_NEAR,

@@ -198,7 +198,7 @@ impl ModelInstance {
         let init_uniforms = Uniforms {
             translation,
             rotation,
-            projection,
+            view_proj: projection,
             use_texture: 1,
             _padding0: [0.0; 3],
             light_dir: LIGHT_DIR,
@@ -292,11 +292,11 @@ impl ModelInstance {
         }
     }
 
-    pub fn update_transform(&self, queue: &Queue, projection: [f32; 16], use_texture: i32) {
+    pub fn update_transform(&self, queue: &Queue, view_proj: [f32; 16], use_texture: i32) {
         let uniforms = Uniforms {
             translation: self.translation,
             rotation: self.rotation,
-            projection,
+            view_proj,
             use_texture,
             _padding0: [0.0; 3],
             light_dir: LIGHT_DIR,

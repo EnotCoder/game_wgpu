@@ -1,7 +1,7 @@
 struct Uniforms {
     translation: vec4<f32>,
     rotation: vec4<f32>,
-    projection: mat4x4<f32>,
+    view_proj: mat4x4<f32>,
     use_texture: i32,
     light_dir: vec4<f32>,
 };
@@ -73,7 +73,7 @@ fn vs_main(
 
     let world_pos = rotated + uniforms.translation.xyz;
 
-    output.position = uniforms.projection * vec4<f32>(world_pos, 1.0);
+    output.position = uniforms.view_proj * vec4<f32>(world_pos, 1.0);
     output.tex_coord = tex_coord;
     output.world_normal = rotated_normal;
 

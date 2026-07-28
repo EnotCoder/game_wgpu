@@ -16,7 +16,7 @@ pub struct Vertex {
 pub struct Uniforms {
     pub translation: [f32; 4],
     pub rotation: [f32; 4],
-    pub projection: [f32; 16],
+    pub view_proj: [f32; 16],
     pub use_texture: i32,
     pub _padding0: [f32; 3],
     pub light_dir: [f32; 4],
@@ -80,7 +80,7 @@ pub fn create_perspective_matrix(aspect: f32, fov: f32, near: f32, far: f32) -> 
 }
 
 pub struct Buffers {
-    pub projection: [f32; 16],
+    pub projection_matrix: [f32; 16],
     pub depth_buffer: DepthBuffer,
     pub depth_stencil: DepthStencilState,
     pub bind_group_layout: BindGroupLayout,
@@ -138,7 +138,7 @@ pub fn init_buffers(window_size: PhysicalSize<u32>, device: &Device) -> Buffers 
     });
 
     Buffers {
-        projection,
+        projection_matrix: projection,
         depth_buffer,
         depth_stencil,
         bind_group_layout,
