@@ -35,9 +35,9 @@ pub fn render(
                 resolve_target: None,
                 ops: Operations {
                     load: LoadOp::Clear(Color {
-                        r: 0.3,
-                        g: 0.3,
-                        b: 0.3,
+                        r: 0.02,
+                        g: 0.02,
+                        b: 0.02,
                         a: 1.0,
                     }),
                     store: StoreOp::Store,
