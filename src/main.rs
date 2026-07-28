@@ -108,16 +108,6 @@ async fn main() {
             buffers.projection_matrix,
             &texture_path,
         ),
-        ModelInstance::new(
-            FON_MODEL_PATH,
-            &device,
-            &queue,
-            translation,
-            FON_TRANSLATION_BASE,
-            [0.0, 0.0, 0.0, 0.0],
-            buffers.projection_matrix,
-            FON_TEXTURE_PATH,
-        ),
     ];
 
     let shader_code = include_str!("shaders.wgsl");
@@ -241,9 +231,6 @@ async fn main() {
         let view_proj = (projection_mat * view).to_cols_array();
 
         models[0].update_transform(&queue, view_proj, ui_state.use_texture as i32);
-        if models.len() > 1 {
-            models[1].update_transform(&queue, view_proj, 1);
-        }
 
         match event {
             Event::WindowEvent {

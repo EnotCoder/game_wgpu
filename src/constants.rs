@@ -10,7 +10,6 @@ pub const CAMERA_FAR: f32 = 100.0;
 
 pub const INITIAL_TRANSLATION: [f32; 4] = [0.0, 0.0, 4.5, 0.0];
 pub const INITIAL_ROTATION: [f32; 4] = [-0.2, 0.0, 0.0, 0.0];
-pub const FON_TRANSLATION_BASE: [f32; 4] = [0.0, 0.0, 15.0, 0.0];
 
 pub const CAMERA_INITIAL_DISTANCE: f32 = 6.0;
 pub const CAMERA_MIN_DISTANCE: f32 = 1.0;
@@ -22,8 +21,6 @@ pub const CAMERA_PAN_SPEED: f32 = 0.005;
 pub const DEFAULT_MODEL_PATH: &str = "null.obj";
 pub const DEFAULT_TEXTURE_PATH: &str = "null.png";
 pub const NULL_TEXTURE_PATH: &str = "tex/null.png";
-pub const FON_MODEL_PATH: &str = "models/fon.obj";
-pub const FON_TEXTURE_PATH: &str = "tex/fon_texture.png";
 
 pub const DEFAULT_VERTEX_HALF_SIZE: f32 = 0.5;
 
