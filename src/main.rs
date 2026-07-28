@@ -13,6 +13,7 @@ mod buffers;
 mod camera;
 mod constants;
 mod egui_manager;
+mod grid;
 mod models;
 mod render;
 mod texture;
@@ -22,6 +23,7 @@ use buffers::*;
 use camera::Camera;
 use constants::*;
 use egui_manager::EguiManager;
+use grid::GridRenderer;
 use glam::Mat4;
 use models::*;
 use render::*;
@@ -118,6 +120,8 @@ async fn main() {
 
     let caps = surface.get_capabilities(&adapter);
     let surface_format = caps.formats[0];
+
+    let grid = GridRenderer::new(&device, surface_format);
 
     let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
         label: Some("Pipeline Layout"),
@@ -230,6 +234,7 @@ async fn main() {
         let projection_mat = Mat4::from_cols_array(&buffers.projection_matrix);
         let view_proj = (projection_mat * view).to_cols_array();
 
+        grid.update(&queue, view_proj);
         models[0].update_transform(&queue, view_proj, ui_state.use_texture as i32);
 
         match event {
@@ -256,6 +261,7 @@ async fn main() {
                     &render_pipeline,
                     &models,
                     &buffers.depth_buffer.view,
+                    &grid,
                     &mut egui_manager,
                     &window,
                     |ctx| ui_state.render(ctx),

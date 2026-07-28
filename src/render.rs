@@ -1,6 +1,7 @@
 use wgpu::*;
 
 use crate::egui_manager::EguiManager;
+use crate::grid::GridRenderer;
 use crate::ModelInstance;
 
 pub fn render(
@@ -10,6 +11,7 @@ pub fn render(
     render_pipeline: &RenderPipeline,
     models: &[ModelInstance],
     depth_view: &TextureView,
+    grid: &GridRenderer,
     egui_manager: &mut EguiManager,
     window: &winit::window::Window,
     run_ui: impl FnOnce(&egui::Context),
@@ -54,6 +56,8 @@ pub fn render(
             occlusion_query_set: None,
             timestamp_writes: None,
         });
+
+        grid.render(&mut render_pass);
 
         render_pass.set_pipeline(render_pipeline);
 
