@@ -14,6 +14,7 @@ mod camera;
 mod constants;
 mod egui_manager;
 mod grid;
+mod loader;
 mod models;
 mod render;
 mod texture;
@@ -25,6 +26,7 @@ use constants::*;
 use egui_manager::EguiManager;
 use grid::GridRenderer;
 use glam::Mat4;
+use loader::load_model;
 use models::*;
 use render::*;
 use ui_panels::UiState;
@@ -99,9 +101,14 @@ async fn main() {
         0.0,
     );
 
+    let model_obj = load_model(&model_path).unwrap_or_else(|e| {
+        eprintln!("Failed to load model '{}': {}", model_path, e);
+        default_model_obj()
+    });
+
     let mut models = vec![
         ModelInstance::new(
-            &model_path,
+            model_obj,
             &device,
             &queue,
             translation,
