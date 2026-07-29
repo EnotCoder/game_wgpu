@@ -120,7 +120,7 @@ impl GridRenderer {
             layout: Some(&pipeline_layout),
             depth_stencil: Some(DepthStencilState {
                 format: crate::constants::DEPTH_FORMAT,
-                depth_write_enabled: true,
+                depth_write_enabled: false,
                 depth_compare: CompareFunction::Less,
                 stencil: StencilState::default(),
                 bias: DepthBiasState::default(),
