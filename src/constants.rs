@@ -1,8 +1,8 @@
 use wgpu::{PresentMode, TextureFormat};
 
 pub const WINDOW_TITLE: &str = "game";
-pub const WINDOW_WIDTH: u32 = 720;
-pub const WINDOW_HEIGHT: u32 = 720;
+pub const WINDOW_WIDTH: u32 = 950;
+pub const WINDOW_HEIGHT: u32 = 950;
 
 pub const CAMERA_FOV: f32 = std::f32::consts::PI / 4.0;
 pub const CAMERA_NEAR: f32 = 0.1;
