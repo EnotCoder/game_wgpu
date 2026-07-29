@@ -165,6 +165,52 @@ fn compute_flat_normals(vertices: &mut [Vertex]) {
     }
 }
 
+const MODEL_AUTO_SCALE_EXTENT: f32 = 3.0;
+
+pub(crate) fn normalize_model(model: &mut ModelObj) {
+    if model.vertices.is_empty() {
+        return;
+    }
+
+    let mut min = [f32::MAX; 3];
+    let mut max = [f32::MIN; 3];
+    for v in &model.vertices {
+        for i in 0..3 {
+            min[i] = min[i].min(v.position[i]);
+            max[i] = max[i].max(v.position[i]);
+        }
+    }
+
+    let center = [
+        (min[0] + max[0]) * 0.5,
+        (min[1] + max[1]) * 0.5,
+        (min[2] + max[2]) * 0.5,
+    ];
+    let extent = [max[0] - min[0], max[1] - min[1], max[2] - min[2]];
+    let max_dim = extent[0].max(extent[1].max(extent[2]));
+
+    if max_dim > MODEL_AUTO_SCALE_EXTENT && max_dim > 0.0 {
+        let scale = MODEL_AUTO_SCALE_EXTENT / max_dim;
+        for v in &mut model.vertices {
+            v.position = [
+                (v.position[0] - center[0]) * scale,
+                (v.position[1] - center[1]) * scale,
+                (v.position[2] - center[2]) * scale,
+            ];
+        }
+        println!("Auto-scaled model: original extent={:.3}, scale={:.3}", max_dim, scale);
+    } else if max_dim > 0.0 {
+        for v in &mut model.vertices {
+            v.position = [
+                v.position[0] - center[0],
+                v.position[1] - center[1],
+                v.position[2] - center[2],
+            ];
+        }
+        println!("Model centered at origin, extent={:.3}", max_dim);
+    }
+}
+
 pub(crate) fn default_model_obj() -> ModelObj {
     let vertices = default_vertices();
     let indices: Vec<u32> = (0..vertices.len() as u32).collect();
