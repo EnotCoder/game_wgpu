@@ -12,6 +12,7 @@ pub fn render(
     models: &[ModelInstance],
     depth_view: &TextureView,
     grid: &GridRenderer,
+    show_grid: bool,
     egui_manager: &mut EguiManager,
     window: &winit::window::Window,
     run_ui: impl FnOnce(&egui::Context),
@@ -57,7 +58,9 @@ pub fn render(
             timestamp_writes: None,
         });
 
-        grid.render(&mut render_pass);
+        if show_grid {
+            grid.render(&mut render_pass);
+        }
 
         render_pass.set_pipeline(render_pipeline);
 

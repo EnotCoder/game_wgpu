@@ -226,6 +226,9 @@ async fn main() {
             if input.key_pressed(KeyCode::F1) {
                 ui_state.toggle_panel();
             }
+            if input.key_pressed(KeyCode::F2) {
+                ui_state.show_grid = !ui_state.show_grid;
+            }
         }
 
         for model in &mut models {
@@ -269,6 +272,7 @@ async fn main() {
                     &models,
                     &buffers.depth_buffer.view,
                     &grid,
+                    ui_state.show_grid,
                     &mut egui_manager,
                     &window,
                     |ctx| ui_state.render(ctx),

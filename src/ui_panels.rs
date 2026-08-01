@@ -4,6 +4,7 @@ use egui::{Context, Frame, TopBottomPanel};
 
 pub struct UiState {
     pub show_panel: bool,
+    pub show_grid: bool,
     pub model_path: String,
     pub use_texture: bool,
     pub fps: f32,
@@ -17,6 +18,7 @@ impl UiState {
     pub fn new(model_path: String, _texture_path: String) -> Self {
         Self {
             show_panel: true,
+            show_grid: true,
             model_path,
             use_texture: true,
             fps: 0.0,
@@ -102,10 +104,11 @@ impl UiState {
 
                 ui.horizontal(|ui| {
                     ui.checkbox(&mut self.use_texture, "Texture");
+                    ui.checkbox(&mut self.show_grid, "Grid");
 
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.label(
-                            egui::RichText::new("F1 - Toggle UI")
+                            egui::RichText::new("F1 - UI | F2 - Grid")
                                 .color(egui::Color32::from_rgb(100, 100, 110))
                                 .size(11.0),
                         );
