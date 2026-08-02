@@ -2,9 +2,16 @@ use std::time::Instant;
 
 use egui::{Context, Frame, TopBottomPanel};
 
+use crate::constants::*;
+
+fn rgb(c: [u8; 3]) -> egui::Color32 {
+    egui::Color32::from_rgb(c[0], c[1], c[2])
+}
+
 pub struct UiState {
     pub show_panel: bool,
     pub show_grid: bool,
+    pub pixelated: bool,
     pub model_path: String,
     pub use_texture: bool,
     pub fps: f32,
@@ -19,6 +26,7 @@ impl UiState {
         Self {
             show_panel: true,
             show_grid: true,
+            pixelated: false,
             model_path,
             use_texture: true,
             fps: 0.0,
@@ -44,7 +52,7 @@ impl UiState {
             return;
         }
 
-        let panel_color = egui::Color32::from_rgb(38, 38, 42);
+        let panel_color = rgb(UI_PANEL_FILL);
 
         TopBottomPanel::bottom("status_bar")
             .min_height(52.0)
@@ -57,7 +65,7 @@ impl UiState {
                 ui.horizontal(|ui| {
                     ui.label(
                         egui::RichText::new("TMV Alpha")
-                            .color(egui::Color32::from_rgb(61, 110, 245))
+                            .color(rgb(UI_ACCENT))
                             .size(14.0)
                             .strong(),
                     );
@@ -104,6 +112,7 @@ impl UiState {
 
                 ui.horizontal(|ui| {
                     ui.checkbox(&mut self.use_texture, "Texture");
+                    ui.checkbox(&mut self.pixelated, "Pixelated");
                     ui.checkbox(&mut self.show_grid, "Grid");
 
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {

@@ -19,6 +19,7 @@ pub struct Uniforms {
     pub view_proj: [f32; 16],
     pub use_texture: i32,
     pub _padding0: [f32; 3],
+    pub base_color: [f32; 4],
     pub light_dir: [f32; 4],
 }
 

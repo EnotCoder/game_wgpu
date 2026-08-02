@@ -92,7 +92,6 @@ pub fn load_gltf(path: &str) -> Result<ModelObj, String> {
 
             loaded_any = true;
         }
-        break;
     }
 
     if !loaded_any {
@@ -165,8 +164,6 @@ fn compute_flat_normals(vertices: &mut [Vertex]) {
     }
 }
 
-const MODEL_AUTO_SCALE_EXTENT: f32 = 3.0;
-
 pub(crate) fn normalize_model(model: &mut ModelObj) {
     if model.vertices.is_empty() {
         return;
@@ -189,7 +186,7 @@ pub(crate) fn normalize_model(model: &mut ModelObj) {
     let extent = [max[0] - min[0], max[1] - min[1], max[2] - min[2]];
     let max_dim = extent[0].max(extent[1].max(extent[2]));
 
-    if max_dim > MODEL_AUTO_SCALE_EXTENT && max_dim > 0.0 {
+    if max_dim > MODEL_AUTO_SCALE_EXTENT {
         let scale = MODEL_AUTO_SCALE_EXTENT / max_dim;
         for v in &mut model.vertices {
             v.position = [
@@ -230,10 +227,8 @@ fn default_vertices() -> Vec<Vertex> {
 }
 
 pub struct ModelInstance {
-    #[allow(dead_code)]
-    pub vertices: Vec<Vertex>,
-    #[allow(dead_code)]
-    pub indices: Vec<u16>,
+    pub vertex_count: u32,
+    pub color: [f32; 4],
     pub translation: [f32; 4],
     pub translation_base: [f32; 4],
     pub rotation: [f32; 4],
@@ -242,7 +237,8 @@ pub struct ModelInstance {
     pub index_count: u32,
     pub uniform_buffer: Buffer,
     pub bind_group: BindGroup,
-    pub texture_bind_group: BindGroup,
+    pub texture_bind_group_nearest: BindGroup,
+    pub texture_bind_group_linear: BindGroup,
 }
 
 impl ModelInstance {
@@ -256,21 +252,22 @@ impl ModelInstance {
         rotation: [f32; 4],
         projection: [f32; 16],
         texture_path: &str,
+        bind_group_layout: &BindGroupLayout,
+        tex_bind_group_layout: &BindGroupLayout,
+        color: [f32; 4],
     ) -> Self {
-        let (vertices, indices_u32) = (model.vertices, model.indices);
-
-        let indices: Vec<u16> = indices_u32.iter().map(|&i| i as u16).collect();
-        let index_count = indices.len() as u32;
+        let vertex_count = model.vertices.len() as u32;
+        let index_count = model.indices.len() as u32;
 
         let vertex_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(&vertices),
+            contents: bytemuck::cast_slice(&model.vertices),
             usage: BufferUsages::VERTEX,
         });
 
         let index_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Index Buffer"),
-            contents: bytemuck::cast_slice(&indices),
+            contents: bytemuck::cast_slice(&model.indices),
             usage: BufferUsages::INDEX,
         });
 
@@ -280,6 +277,7 @@ impl ModelInstance {
             view_proj: projection,
             use_texture: 1,
             _padding0: [0.0; 3],
+            base_color: color,
             light_dir: LIGHT_DIR,
         };
         let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
@@ -288,23 +286,9 @@ impl ModelInstance {
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         });
 
-        let bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-            label: Some("Model Bind Group Layout"),
-            entries: &[BindGroupLayoutEntry {
-                binding: 0,
-                visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
-                ty: BindingType::Buffer {
-                    ty: BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            }],
-        });
-
         let bind_group = device.create_bind_group(&BindGroupDescriptor {
             label: Some("Model Bind Group"),
-            layout: &bind_group_layout,
+            layout: bind_group_layout,
             entries: &[BindGroupEntry {
                 binding: 0,
                 resource: uniform_buffer.as_entire_binding(),
@@ -318,47 +302,31 @@ impl ModelInstance {
                         .expect("Cannot continue without texture")
                 });
 
-        let tex_bind_group_layout =
-            device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-                label: Some("Texture Bind Group Layout"),
+        let make_tex_bind_group = |sampler: &Sampler, label: &str| {
+            device.create_bind_group(&BindGroupDescriptor {
+                label: Some(label),
+                layout: tex_bind_group_layout,
                 entries: &[
-                    BindGroupLayoutEntry {
+                    BindGroupEntry {
                         binding: 0,
-                        visibility: ShaderStages::FRAGMENT,
-                        ty: BindingType::Texture {
-                            multisampled: false,
-                            view_dimension: TextureViewDimension::D2,
-                            sample_type: TextureSampleType::Float { filterable: true },
-                        },
-                        count: None,
+                        resource: BindingResource::TextureView(&loaded_texture.view),
                     },
-                    BindGroupLayoutEntry {
+                    BindGroupEntry {
                         binding: 1,
-                        visibility: ShaderStages::FRAGMENT,
-                        ty: BindingType::Sampler(SamplerBindingType::Filtering),
-                        count: None,
+                        resource: BindingResource::Sampler(sampler),
                     },
                 ],
-            });
+            })
+        };
 
-        let texture_bind_group = device.create_bind_group(&BindGroupDescriptor {
-            label: Some("Texture Bind Group"),
-            layout: &tex_bind_group_layout,
-            entries: &[
-                BindGroupEntry {
-                    binding: 0,
-                    resource: BindingResource::TextureView(&loaded_texture.view),
-                },
-                BindGroupEntry {
-                    binding: 1,
-                    resource: BindingResource::Sampler(&loaded_texture.sampler),
-                },
-            ],
-        });
+        let texture_bind_group_nearest =
+            make_tex_bind_group(&loaded_texture.sampler_nearest, "Texture Bind Group (Nearest)");
+        let texture_bind_group_linear =
+            make_tex_bind_group(&loaded_texture.sampler_linear, "Texture Bind Group (Linear)");
 
         Self {
-            vertices,
-            indices,
+            vertex_count,
+            color,
             translation,
             translation_base,
             rotation,
@@ -367,7 +335,8 @@ impl ModelInstance {
             index_count,
             uniform_buffer,
             bind_group,
-            texture_bind_group,
+            texture_bind_group_nearest,
+            texture_bind_group_linear,
         }
     }
 
@@ -378,8 +347,113 @@ impl ModelInstance {
             view_proj,
             use_texture,
             _padding0: [0.0; 3],
+            base_color: self.color,
             light_dir: LIGHT_DIR,
         };
         queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[uniforms]));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_vertex(x: f32, y: f32, z: f32) -> Vertex {
+        Vertex { position: [x, y, z], normal: [0.0, 0.0, 1.0], tex_coord: [0.0, 0.0] }
+    }
+
+    fn bbox_center(model: &ModelObj) -> ([f32; 3], [f32; 3]) {
+        let mut min = [f32::MAX; 3];
+        let mut max = [f32::MIN; 3];
+        for v in &model.vertices {
+            for i in 0..3 {
+                min[i] = min[i].min(v.position[i]);
+                max[i] = max[i].max(v.position[i]);
+            }
+        }
+        let center = [
+            (min[0] + max[0]) * 0.5,
+            (min[1] + max[1]) * 0.5,
+            (min[2] + max[2]) * 0.5,
+        ];
+        (center, max)
+    }
+
+    #[test]
+    fn normalize_scales_down_large_model() {
+        let mut model = ModelObj {
+            vertices: vec![
+                sample_vertex(0.0, 0.0, 0.0),
+                sample_vertex(100.0, 0.0, 0.0),
+                sample_vertex(100.0, 100.0, 0.0),
+            ],
+            indices: vec![0, 1, 2],
+        };
+
+        normalize_model(&mut model);
+
+        let (center, max) = bbox_center(&model);
+        let extent = 2.0 * max[0].max(max[1]).max(max[2]);
+        assert!(extent <= MODEL_AUTO_SCALE_EXTENT + 0.001, "extent {} > {}", extent, MODEL_AUTO_SCALE_EXTENT);
+        for (i, c) in center.iter().enumerate() {
+            assert!(c.abs() < 0.001, "not centered on axis {}: {}", i, c);
+        }
+    }
+
+    #[test]
+    fn normalize_centers_small_model() {
+        let mut model = ModelObj {
+            vertices: vec![
+                sample_vertex(10.0, 10.0, 10.0),
+                sample_vertex(12.0, 10.0, 10.0),
+                sample_vertex(10.0, 12.0, 10.0),
+            ],
+            indices: vec![0, 1, 2],
+        };
+
+        normalize_model(&mut model);
+
+        let (center, _) = bbox_center(&model);
+        for (i, c) in center.iter().enumerate() {
+            assert!(c.abs() < 0.001, "not centered on axis {}: {}", i, c);
+        }
+    }
+
+    #[test]
+    fn stl_binary_parses_triangles() {
+        let path = std::env::temp_dir().join("tmv_test_triangle.stl");
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&[0u8; 80]);
+        bytes.extend_from_slice(&1u32.to_le_bytes());
+        let mut tri = Vec::new();
+        tri.extend_from_slice(&[0.0f32; 3].into_iter().flat_map(|v| v.to_le_bytes()).collect::<Vec<_>>());
+        for p in [[0.0f32, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]] {
+            for c in p {
+                tri.extend_from_slice(&c.to_le_bytes());
+            }
+        }
+        tri.extend_from_slice(&[0u8; 2]);
+        bytes.extend_from_slice(&tri);
+        std::fs::write(&path, &bytes).unwrap();
+
+        let model = load_stl(path.to_str().unwrap()).expect("STL should parse");
+        assert_eq!(model.vertices.len(), 3);
+        assert_eq!(model.indices.len(), 3);
+        assert_eq!(model.vertices[0].position, [0.0, 0.0, 0.0]);
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn obj_parses_triangles() {
+        let path = std::env::temp_dir().join("tmv_test_triangle.obj");
+        let obj = "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n";
+        std::fs::write(&path, obj).unwrap();
+
+        let model = load_obj(path.to_str().unwrap()).expect("OBJ should parse");
+        assert_eq!(model.vertices.len(), 3);
+        assert_eq!(model.indices.len(), 3);
+
+        let _ = std::fs::remove_file(&path);
     }
 }

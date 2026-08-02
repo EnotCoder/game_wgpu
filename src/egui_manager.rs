@@ -4,6 +4,12 @@ use egui_winit::State;
 use wgpu::{CommandEncoder, Device, Queue, TextureFormat, TextureView};
 use winit::window::Window;
 
+use crate::constants::*;
+
+fn rgb(c: [u8; 3]) -> egui::Color32 {
+    egui::Color32::from_rgb(c[0], c[1], c[2])
+}
+
 pub struct EguiManager {
     pub context: Context,
     state: State,
@@ -23,13 +29,13 @@ impl EguiManager {
 
         let mut style = (*egui_context.style()).clone();
         style.visuals = Visuals::dark();
-        style.visuals.panel_fill = egui::Color32::from_rgb(38, 38, 42);
-        style.visuals.widgets.noninteractive.bg_fill = egui::Color32::from_rgb(48, 48, 54);
-        style.visuals.widgets.inactive.bg_fill = egui::Color32::from_rgb(58, 58, 64);
-        style.visuals.widgets.hovered.bg_fill = egui::Color32::from_rgb(68, 68, 76);
-        style.visuals.widgets.active.bg_fill = egui::Color32::from_rgb(78, 78, 86);
-        style.visuals.selection.bg_fill = egui::Color32::from_rgb(61, 110, 245);
-        style.visuals.hyperlink_color = egui::Color32::from_rgb(61, 110, 245);
+        style.visuals.panel_fill = rgb(UI_PANEL_FILL);
+        style.visuals.widgets.noninteractive.bg_fill = rgb(UI_BG_FILL);
+        style.visuals.widgets.inactive.bg_fill = rgb(UI_INACTIVE_FILL);
+        style.visuals.widgets.hovered.bg_fill = rgb(UI_HOVERED_FILL);
+        style.visuals.widgets.active.bg_fill = rgb(UI_ACTIVE_FILL);
+        style.visuals.selection.bg_fill = rgb(UI_ACCENT);
+        style.visuals.hyperlink_color = rgb(UI_ACCENT);
         style.visuals.window_rounding = egui::Rounding::same(0.0);
         style.visuals.window_shadow = egui::epaint::Shadow::NONE;
         style.spacing.item_spacing = egui::Vec2::new(8.0, 4.0);
@@ -50,6 +56,7 @@ impl EguiManager {
         let _ = self.state.on_window_event(window, event);
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn draw<F>(
         &mut self,
         device: &Device,

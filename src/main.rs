@@ -1,9 +1,9 @@
 use std::env;
+
 use winit::{
     dpi::PhysicalSize,
     event::{Event, WindowEvent},
     event_loop::EventLoop,
-    keyboard::KeyCode,
     window::WindowBuilder,
 };
 use winit_input_helper::WinitInputHelper;
@@ -14,9 +14,11 @@ mod camera;
 mod constants;
 mod egui_manager;
 mod grid;
+mod input;
 mod loader;
 mod models;
 mod render;
+mod setup;
 mod texture;
 mod ui_panels;
 
@@ -24,11 +26,13 @@ use buffers::*;
 use camera::Camera;
 use constants::*;
 use egui_manager::EguiManager;
-use grid::GridRenderer;
 use glam::Mat4;
+use grid::GridRenderer;
+use input::handle_input;
 use loader::load_model;
 use models::*;
 use render::*;
+use setup::create_graphics;
 use ui_panels::UiState;
 
 fn surface_config(format: TextureFormat, width: u32, height: u32) -> SurfaceConfiguration {
@@ -61,35 +65,13 @@ async fn main() {
         .with_title(WINDOW_TITLE)
         .with_inner_size(PhysicalSize::new(WINDOW_WIDTH, WINDOW_HEIGHT))
         .build(&event_loop)
-        .unwrap();
+        .expect("Failed to create window");
 
-    let instance = Instance::new(InstanceDescriptor::default());
-    let surface = instance
-        .create_surface(&window)
-        .expect("Failed to create surface");
-
-    let adapter = pollster::block_on(instance.request_adapter(&RequestAdapterOptions {
-        compatible_surface: Some(&surface),
-        ..Default::default()
-    }))
-    .unwrap();
-
-    println!("{}", adapter.get_info().name);
-
-    let (device, queue) = adapter
-        .request_device(
-            &DeviceDescriptor {
-                required_features: Features::empty(),
-                required_limits: Limits::default(),
-                label: None,
-            },
-            None,
-        )
-        .await
-        .unwrap();
+    let gfx = create_graphics(&window).await;
+    let surface_format = gfx.surface_format;
 
     let window_size = window.inner_size();
-    let mut buffers = init_buffers(window_size, &device);
+    let mut buffers = init_buffers(window_size, &gfx.device);
 
     let translation = INITIAL_TRANSLATION;
     let rotation = INITIAL_ROTATION;
@@ -109,34 +91,34 @@ async fn main() {
     let mut models = vec![
         ModelInstance::new(
             model_obj,
-            &device,
-            &queue,
+            &gfx.device,
+            &gfx.queue,
             translation,
             [0.0, 0.0, 0.0, 0.0],
             rotation,
             buffers.projection_matrix,
             &texture_path,
+            &buffers.bind_group_layout,
+            &buffers.texture_bind_group_layout,
+            DEFAULT_BASE_COLOR,
         ),
     ];
 
     let shader_code = include_str!("shaders.wgsl");
-    let shader_module = device.create_shader_module(ShaderModuleDescriptor {
+    let shader_module = gfx.device.create_shader_module(ShaderModuleDescriptor {
         label: None,
         source: ShaderSource::Wgsl(shader_code.into()),
     });
 
-    let caps = surface.get_capabilities(&adapter);
-    let surface_format = caps.formats[0];
+    let grid = GridRenderer::new(&gfx.device, surface_format);
 
-    let grid = GridRenderer::new(&device, surface_format);
-
-    let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
+    let pipeline_layout = gfx.device.create_pipeline_layout(&PipelineLayoutDescriptor {
         label: Some("Pipeline Layout"),
         bind_group_layouts: &[&buffers.bind_group_layout, &buffers.texture_bind_group_layout],
         push_constant_ranges: &[],
     });
 
-    let render_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
+    let render_pipeline = gfx.device.create_render_pipeline(&RenderPipelineDescriptor {
         label: Some("Render Pipeline"),
         vertex: VertexState {
             buffers: &[VertexBufferLayout {
@@ -187,14 +169,14 @@ async fn main() {
         multiview: None,
     });
 
-    surface.configure(
-        &device,
+    gfx.surface.configure(
+        &gfx.device,
         &surface_config(surface_format, window_size.width, window_size.height),
     );
 
     let mut input = WinitInputHelper::new();
     let mut egui_manager =
-        EguiManager::new(&device, surface_format, None, DEFAULT_SAMPLE_COUNT, &window);
+        EguiManager::new(&gfx.device, surface_format, None, DEFAULT_SAMPLE_COUNT, &window);
     let mut ui_state = UiState::new(model_path, texture_path);
     let win_id = window.id();
 
@@ -210,25 +192,7 @@ async fn main() {
         }
 
         if input.update(&event) {
-            let diff = input.cursor_diff();
-            if input.mouse_held(0) {
-                camera.orbit(diff.0 * CAMERA_ORBIT_SPEED, -diff.1 * CAMERA_ORBIT_SPEED);
-            }
-            if input.mouse_held(1) {
-                camera.pan(-diff.0, diff.1, CAMERA_PAN_SPEED);
-            }
-
-            let scroll_delta = input.scroll_diff();
-            if scroll_delta.1 != 0.0 {
-                camera.zoom(scroll_delta.1 * CAMERA_ZOOM_SPEED);
-            }
-
-            if input.key_pressed(KeyCode::F1) {
-                ui_state.toggle_panel();
-            }
-            if input.key_pressed(KeyCode::F2) {
-                ui_state.show_grid = !ui_state.show_grid;
-            }
+            handle_input(&mut input, &mut camera, &mut ui_state);
         }
 
         for model in &mut models {
@@ -244,8 +208,8 @@ async fn main() {
         let projection_mat = Mat4::from_cols_array(&buffers.projection_matrix);
         let view_proj = (projection_mat * view).to_cols_array();
 
-        grid.update(&queue, view_proj);
-        models[0].update_transform(&queue, view_proj, ui_state.use_texture as i32);
+        grid.update(&gfx.queue, view_proj);
+        models[0].update_transform(&gfx.queue, view_proj, ui_state.use_texture as i32);
 
         match event {
             Event::WindowEvent {
@@ -261,18 +225,19 @@ async fn main() {
                 event: WindowEvent::RedrawRequested,
                 ..
             } => {
-                ui_state.vertex_count = models[0].vertices.len() as u32;
+                ui_state.vertex_count = models[0].vertex_count;
                 ui_state.triangle_count = models[0].index_count / 3;
 
                 render(
-                    &surface,
-                    &device,
-                    &queue,
+                    &gfx.surface,
+                    &gfx.device,
+                    &gfx.queue,
                     &render_pipeline,
                     &models,
                     &buffers.depth_buffer.view,
                     &grid,
                     ui_state.show_grid,
+                    ui_state.pixelated,
                     &mut egui_manager,
                     &window,
                     |ctx| ui_state.render(ctx),
@@ -283,11 +248,11 @@ async fn main() {
                 event: WindowEvent::Resized(new_size),
                 window_id: ev_id,
             } if ev_id == win_id => {
-                surface.configure(
-                    &device,
+                gfx.surface.configure(
+                    &gfx.device,
                     &surface_config(surface_format, new_size.width, new_size.height),
                 );
-                buffers.depth_buffer.resize(&device, new_size);
+                buffers.depth_buffer.resize(&gfx.device, new_size);
                 buffers.projection_matrix = create_perspective_matrix(
                     new_size.width as f32 / new_size.height as f32,
                     CAMERA_FOV,

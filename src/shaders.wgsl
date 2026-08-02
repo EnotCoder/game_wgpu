@@ -3,6 +3,7 @@ struct Uniforms {
     rotation: vec4<f32>,
     view_proj: mat4x4<f32>,
     use_texture: i32,
+    base_color: vec4<f32>,
     light_dir: vec4<f32>,
 };
 
@@ -18,8 +19,7 @@ var my_sampler: sampler;
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
     @location(0) tex_coord: vec2<f32>,
-    @location(1) triangle_color: vec3<f32>,
-    @location(2) world_normal: vec3<f32>,
+    @location(1) world_normal: vec3<f32>,
 };
 
 fn rotate_x(vertex: vec3<f32>, angle: f32) -> vec3<f32> {
@@ -57,7 +57,6 @@ fn vs_main(
     @location(0) position: vec3<f32>,
     @location(1) tex_coord: vec2<f32>,
     @location(2) normal: vec3<f32>,
-    @builtin(vertex_index) vertex_index: u32,
 ) -> VertexOutput {
     var output: VertexOutput;
 
@@ -77,20 +76,13 @@ fn vs_main(
     output.tex_coord = tex_coord;
     output.world_normal = rotated_normal;
 
-    let triangle_id = vertex_index / 3;
-    let r = f32(triangle_id % 3) / 2.0;
-    let g = f32((triangle_id / 3) % 3) / 2.0;
-    let b = f32((triangle_id / 9) % 3) / 2.0;
-    output.triangle_color = vec3<f32>(r, g, b);
-
     return output;
 }
 
 @fragment
 fn fs_main(
     @location(0) tex_coord: vec2<f32>,
-    @location(1) triangle_color: vec3<f32>,
-    @location(2) world_normal: vec3<f32>,
+    @location(1) world_normal: vec3<f32>,
 ) -> @location(0) vec4<f32> {
     let light_dir = normalize(uniforms.light_dir.xyz);
     let diffuse = max(dot(normalize(world_normal), light_dir), 0.0);
@@ -101,6 +93,6 @@ fn fs_main(
         let tex_color = textureSample(my_texture, my_sampler, tex_coord);
         return vec4<f32>(tex_color.rgb * lighting, tex_color.a);
     } else {
-        return vec4<f32>(triangle_color * lighting, 1.0);
+        return vec4<f32>(uniforms.base_color.rgb * lighting, uniforms.base_color.a);
     }
 }

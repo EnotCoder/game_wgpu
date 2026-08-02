@@ -42,7 +42,11 @@ impl Camera {
 
     pub fn pan(&mut self, delta_x: f32, delta_y: f32, speed: f32) {
         let forward = (self.target - self.eye()).normalize();
-        let right = Vec3::Y.cross(forward).normalize();
+        let right = if forward.y.abs() > 0.99 {
+            Vec3::X
+        } else {
+            Vec3::Y.cross(forward).normalize()
+        };
         let up = forward.cross(right);
         self.target += right * delta_x * speed;
         self.target += up * delta_y * speed;

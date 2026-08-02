@@ -24,6 +24,16 @@ pub const NULL_TEXTURE_PATH: &str = "tex/null.png";
 
 pub const DEFAULT_VERTEX_HALF_SIZE: f32 = 0.5;
 
+pub const MODEL_AUTO_SCALE_EXTENT: f32 = 3.0;
+pub const DEFAULT_BASE_COLOR: [f32; 4] = [0.8, 0.8, 0.8, 1.0];
+
+pub const UI_PANEL_FILL: [u8; 3] = [38, 38, 42];
+pub const UI_BG_FILL: [u8; 3] = [48, 48, 54];
+pub const UI_INACTIVE_FILL: [u8; 3] = [58, 58, 64];
+pub const UI_HOVERED_FILL: [u8; 3] = [68, 68, 76];
+pub const UI_ACTIVE_FILL: [u8; 3] = [78, 78, 86];
+pub const UI_ACCENT: [u8; 3] = [61, 110, 245];
+
 pub const PRESENT_MODE: PresentMode = PresentMode::Fifo;
 pub const FRAME_LATENCY: u32 = 2;
 pub const DEPTH_FORMAT: TextureFormat = TextureFormat::Depth32Float;

@@ -4,6 +4,7 @@ use crate::egui_manager::EguiManager;
 use crate::grid::GridRenderer;
 use crate::ModelInstance;
 
+#[allow(clippy::too_many_arguments)]
 pub fn render(
     surface: &Surface,
     device: &Device,
@@ -13,6 +14,7 @@ pub fn render(
     depth_view: &TextureView,
     grid: &GridRenderer,
     show_grid: bool,
+    pixelated: bool,
     egui_manager: &mut EguiManager,
     window: &winit::window::Window,
     run_ui: impl FnOnce(&egui::Context),
@@ -65,10 +67,15 @@ pub fn render(
         render_pass.set_pipeline(render_pipeline);
 
         for model in models {
+            let tex_bind_group = if pixelated {
+                &model.texture_bind_group_nearest
+            } else {
+                &model.texture_bind_group_linear
+            };
             render_pass.set_bind_group(0, &model.bind_group, &[]);
-            render_pass.set_bind_group(1, &model.texture_bind_group, &[]);
+            render_pass.set_bind_group(1, tex_bind_group, &[]);
             render_pass.set_vertex_buffer(0, model.vertex_buffer.slice(..));
-            render_pass.set_index_buffer(model.index_buffer.slice(..), IndexFormat::Uint16);
+            render_pass.set_index_buffer(model.index_buffer.slice(..), IndexFormat::Uint32);
             render_pass.draw_indexed(0..model.index_count, 0, 0..1);
         }
     }
