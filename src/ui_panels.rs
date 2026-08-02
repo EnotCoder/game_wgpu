@@ -22,11 +22,11 @@ pub struct UiState {
 }
 
 impl UiState {
-    pub fn new(model_path: String, _texture_path: String) -> Self {
+    pub fn new(model_path: String, texture_path: String) -> Self {
         Self {
             show_panel: true,
             show_grid: true,
-            pixelated: false,
+            pixelated: texture_path.ends_with("null.png"),
             model_path,
             use_texture: true,
             fps: 0.0,
